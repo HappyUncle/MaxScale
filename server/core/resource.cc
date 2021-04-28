@@ -36,6 +36,7 @@
 #include "internal/httpresponse.hh"
 #include "internal/modules.hh"
 #include "internal/monitormanager.hh"
+#include "internal/mariadb_query_manager.hh"
 #include "internal/servermanager.hh"
 #include "internal/service.hh"
 #include "internal/session.hh"
@@ -103,6 +104,8 @@ HttpResponse get_relationship(const HttpRequest& request, ObjectType type, const
 
     return HttpResponse(rel ? MHD_HTTP_OK : MHD_HTTP_NOT_FOUND, rel);
 }
+
+MariaDBQueryManager jee;
 }
 
 bool Resource::match(const HttpRequest& request) const
@@ -340,59 +343,8 @@ HttpResponse::Callback execute_query(const std::string& host, int port, const mx
                                      const std::string& user, const std::string& pw, const std::string& db,
                                      const std::string& sql, unsigned int timeout)
 {
-    return [=]() {
-               MYSQL* conn = mysql_init(nullptr);
-               json_t* rval = nullptr;
-
-               mysql_optionsv(conn, MYSQL_OPT_READ_TIMEOUT, &timeout);
-               mysql_optionsv(conn, MYSQL_OPT_WRITE_TIMEOUT, &timeout);
-               mysql_optionsv(conn, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
-
-               if (mxs_mysql_real_connect(conn, host.c_str(), port, user.c_str(), pw.c_str(), ssl,
-                                          CLIENT_MULTI_RESULTS | CLIENT_MULTI_STATEMENTS))
-               {
-                   if (!db.empty() && mysql_query(conn, ("USE `" + db + "`").c_str()) != 0)
-                   {
-                       rval = format_result(conn, 1);
-                   }
-                   else
-                   {
-                       std::vector<json_t*> results;
-                       bool again = false;
-                       int rc = mysql_query(conn, sql.c_str());
-                       results.push_back(format_result(conn, rc));
-
-                       while (rc == 0 && mysql_more_results(conn))
-                       {
-                           rc = mysql_next_result(conn);
-                           results.push_back(format_result(conn, rc));
-                       }
-
-                       mxb_assert(!results.empty());
-
-                       if (results.size() > 1)
-                       {
-                           rval = json_array();
-
-                           for (json_t* res : results)
-                           {
-                               json_array_append_new(rval, res);
-                           }
-                       }
-                       else
-                       {
-                           rval = results.front();
-                       }
-                   }
-               }
-               else
-               {
-                   rval = format_result(conn, 1);
-               }
-
-               mysql_close(conn);
-               return HttpResponse(MHD_HTTP_OK, rval);
-           };
+    auto rval = jee.schedule_query(user,pw,host, port, sql);
+    return {};
 }
 
 static bool drop_path_part(std::string& path)

@@ -23,6 +23,7 @@ add_library(maxscale-common SHARED
   log.cc
   mainworker.cc
   mariadb.cc
+  mariadb_query_manager.cc
   maxscale_pcre2.cc
   misc.cc
   modulecmd.cc
