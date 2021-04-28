@@ -36,6 +36,7 @@
 #include <maxscale/clock.h>
 #include <maxscale/http.hh>
 #include <maxscale/paths.hh>
+#include <maxscale/threadpool.hh>
 
 #include "internal/adminusers.hh"
 #include "internal/resource.hh"
@@ -731,9 +732,14 @@ int Client::process(string url, string method, const char* upload_data, size_t* 
     }
     else if (auto cb = reply.callback())
     {
-        reply = cb();
+        return queue_delayed_response(cb);
     }
 
+    return queue_response(reply);
+}
+
+int Client::queue_response(const HttpResponse& reply)
+{
     string data;
 
     if (json_t* js = reply.get_response())
@@ -780,6 +786,19 @@ int Client::process(string url, string method, const char* upload_data, size_t* 
     MXS_DEBUG("Response: HTTP %d", reply.get_code());
 
     return rval;
+}
+
+int Client::queue_delayed_response(const HttpResponse::Callback& cb)
+{
+    MHD_suspend_connection(m_connection);
+
+    mxs::thread_pool().execute(
+        [cb, this]() {
+            queue_response(cb());
+            MHD_resume_connection(m_connection);
+        });
+
+    return MHD_YES;
 }
 
 HttpResponse Client::generate_token(const HttpRequest& request)
