@@ -31,7 +31,8 @@ namespace
 {
 
 static char VERSION_STRING[] = "V1.0.0";
-constexpr uint64_t CAPABILITIES = RCAP_TYPE_TRANSACTION_TRACKING | RCAP_TYPE_REQUEST_TRACKING;
+constexpr uint64_t CAPABILITIES = RCAP_TYPE_TRANSACTION_TRACKING | RCAP_TYPE_REQUEST_TRACKING
+    | RCAP_TYPE_NO_METADATA_CACHE;
 
 /**
  * Implement "call command cache show ..."
