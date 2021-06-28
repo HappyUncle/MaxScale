@@ -32,4 +32,5 @@ public:
 private:
     bool check_replication() override;
     bool reset_server(int i) override;
+    bool wait_until_nodes_ready();
 };

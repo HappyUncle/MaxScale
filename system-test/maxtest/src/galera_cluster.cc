@@ -15,6 +15,7 @@
 #include <iostream>
 #include <maxtest/log.hh>
 #include <maxbase/format.hh>
+#include <maxbase/stopwatch.hh>
 
 using std::cout;
 using std::endl;
@@ -82,20 +83,23 @@ bool GaleraCluster::start_replication()
         }
     }
 
-    string str = mxb::string_printf("%s/galera_wait_until_ready.sh", m_test_dir.c_str());
-    copy_to_node(0, str.c_str(), access_homedir(0));
+    if (wait_until_nodes_ready())
+    {
+        create_users(0);
+        const char create_repl_user[] =
+            "grant replication slave on *.* to repl@'%%' identified by 'repl'; "
+            "FLUSH PRIVILEGES";
 
-    ssh_node_f(0, true, "%s/galera_wait_until_ready.sh %s", access_homedir(0), m_socket_cmd[0].c_str());
+        local_result += robust_connect(5) ? 0 : 1;
+        local_result += execute_query(nodes[0], "%s", create_repl_user);
 
-    create_users(0);
-    const char create_repl_user[] =
-        "grant replication slave on *.* to repl@'%%' identified by 'repl'; "
-        "FLUSH PRIVILEGES";
+        close_connections();
+    }
+    else
+    {
+        local_result++;
+    }
 
-    local_result += robust_connect(5) ? 0 : 1;
-    local_result += execute_query(nodes[0], "%s", create_repl_user);
-
-    close_connections();
     return local_result == 0;
 }
 
@@ -223,4 +227,64 @@ bool GaleraCluster::create_users(int i)
         }
     }
     return rval;
+}
+
+bool GaleraCluster::wait_until_nodes_ready()
+{
+    std::set<int> pending_nodes;
+    for (int i = 0; i < N; i++)
+    {
+        pending_nodes.insert(i);
+    }
+
+    const string is_ready_cmd = "mysql --skip-column-names -s -e 'select @@wsrep_ready'";
+    auto start = mxb::Clock::now();
+    auto time_limit = mxb::from_secs(100);
+
+    while (!pending_nodes.empty())
+    {
+        auto it = pending_nodes.begin();
+        while (it != pending_nodes.end())
+        {
+            auto& vm = backend(*it)->vm_node();
+            auto res = vm.run_cmd_output_sudo(is_ready_cmd);
+            if (res.rc == 0)
+            {
+                if (res.output == "ON")
+                {
+                    it = pending_nodes.erase(it);
+                    logger().log_msgf("Galera node '%s' is ready", vm.m_name.c_str());
+                }
+                else
+                {
+                    logger().log_msgf("Galera node '%s' not yet ready, 'wsrep_ready' is '%s'",
+                                      vm.m_name.c_str(), res.output.c_str());
+                }
+            }
+            else
+            {
+                logger().log_msgf("Command '%s' failed on '%s': Error %i",
+                                  is_ready_cmd.c_str(), vm.m_name.c_str(), res.rc);
+            }
+        }
+
+        auto n_pending = pending_nodes.size();
+        if (n_pending > 0)
+        {
+            auto time_remaining = mxb::to_secs(time_limit - (mxb::Clock::now() - start));
+            if (time_remaining > 0)
+            {
+                logger().log_msgf("Still waiting for %lu Galera nodes. %.1f seconds remaining.",
+                                  n_pending, time_remaining);
+                sleep(1);
+            }
+            else
+            {
+                logger().log_msgf("Timeout while waiting for %lu Galera nodes to start.", n_pending);
+                break;
+            }
+        }
+    }
+
+    return pending_nodes.empty();
 }
