@@ -27,6 +27,7 @@
 
 #include <maxbase/alloc.h>
 #include <maxsql/mariadb.hh>
+#include <maxscale/cn_strings.hh>
 #include <maxscale/listener.hh>
 #include <maxscale/modinfo.hh>
 #include <maxscale/modutil.hh>
@@ -75,6 +76,13 @@ string get_version_string(SERVICE* service)
     {
         auto& custom_suffix = service->custom_version_suffix();
         return custom_suffix.empty() ? default_version : default_version + custom_suffix;
+    }
+
+    /**
+     * In order to support mysql 8.0.x
+     */
+    if (!service->params().get_bool(CN_BACKWARDS_COMPATIBILITY)) {
+        return service_vrs;
     }
 
     // Older applications don't understand versions other than 5 and cause strange problems.

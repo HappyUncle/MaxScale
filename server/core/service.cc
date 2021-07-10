@@ -144,6 +144,13 @@ static std::string get_version_string(mxs::ConfigParameters* params)
 {
     std::string version_string = params->get_string(CN_VERSION_STRING);
 
+    /**
+     * In order to support mysql 8.0.x
+     */
+    if (!params->get_bool(CN_BACKWARDS_COMPATIBILITY)) {
+        return version_string;
+    }
+
     if (!version_string.empty() && version_string[0] != '5')
     {
         /**
@@ -1251,6 +1258,9 @@ const MXS_MODULE_PARAM* common_service_params()
             CN_LOCALHOST_MATCH_WILDCARD_HOST, MXS_MODULE_PARAM_BOOL, "true", MXS_MODULE_OPT_DEPRECATED
         },
         {CN_VERSION_STRING,       MXS_MODULE_PARAM_STRING},
+        {
+            CN_BACKWARDS_COMPATIBILITY,       MXS_MODULE_PARAM_BOOL, "true"
+        },
         {CN_FILTERS,              MXS_MODULE_PARAM_STRING},
         {CN_LOG_AUTH_WARNINGS,    MXS_MODULE_PARAM_BOOL,     "true"},
         {

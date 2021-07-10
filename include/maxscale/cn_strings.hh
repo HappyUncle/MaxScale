@@ -80,6 +80,7 @@ constexpr char CN_TYPE[] = "type";
 constexpr char CN_UNIX[] = "unix";
 constexpr char CN_USER[] = "user";
 constexpr char CN_VERSION_STRING[] = "version_string";
+constexpr char CN_BACKWARDS_COMPATIBILITY[] = "backwards_compatibility";
 
 /*
  * Global configuration items that are read (or pre_parsed) to be available for
